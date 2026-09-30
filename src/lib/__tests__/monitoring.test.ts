@@ -155,3 +155,16 @@ describe("Monitoring", () => {
     })
   })
 })
+
+it("scrubs unhandled error secrets before Sentry receives them", async () => {
+  const sentry = await import("@sentry/nextjs")
+  const capture = vi.spyOn(sentry, "captureException")
+  initMonitoring()
+  window.dispatchEvent(new ErrorEvent("error", {
+    message: "Authorization: Bearer browser-secret person@example.com",
+  }))
+  expect(capture).toHaveBeenCalled()
+  const reported = String(capture.mock.calls.at(-1)?.[0])
+  expect(reported).not.toContain("browser-secret")
+  expect(reported).not.toContain("person@example.com")
+})

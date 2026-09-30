@@ -123,3 +123,27 @@ describe("structured logger", () => {
     expect(getBufferedLogCount()).toBe(0)
   })
 })
+
+describe("browser log scrubbing", () => {
+  it("redacts authorization headers, tokens, and personal fields before fetch transport", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }))
+    vi.stubGlobal("fetch", fetchMock)
+    setLogLevel("info")
+
+    logger.error("Request failed: Bearer eyJhbGciOiJub25lIn0.payload.signature", {
+      headers: { Authorization: "Bearer super-secret" },
+      accessToken: "super-secret",
+      email: "person@example.com",
+      name: "Person Name",
+    })
+    flushLogs()
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const body = String(fetchMock.mock.calls[0][1].body)
+    expect(body).not.toContain("super-secret")
+    expect(body).not.toContain("person@example.com")
+    expect(body).not.toContain("Person Name")
+    expect(body).toContain("[redacted]")
+    expect(body).toContain("[email]")
+  })
+})

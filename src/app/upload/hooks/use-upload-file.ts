@@ -8,7 +8,7 @@ import {
   IDLE_PROGRESS,
   TRANSFER_TIMEOUT_MS,
   getUploadPath,
-  isAllowedUpload,
+  validateUploadFile,
   type UploadErrorKind,
   type UploadProgress,
   type UploadStatus,
@@ -72,10 +72,13 @@ export function useUploadFile(): UseUploadFileReturn {
   const selectFile = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
     if (!selectedFile) return
-    if (!isAllowedUpload(selectedFile)) {
+    const validation = validateUploadFile(selectedFile.name, selectedFile.size)
+    if (!validation.ok) {
+      setFile(null)
       setStatus("error")
       setErrorKind("validation")
-      setMessage("Only .md and .html files are allowed")
+      setMessage(validation.error)
+      event.target.value = ""
       return
     }
     setFile(selectedFile)

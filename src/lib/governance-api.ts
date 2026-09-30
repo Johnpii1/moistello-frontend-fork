@@ -1,6 +1,6 @@
 import { get } from "@/lib/api-client"
 
-export type ProposalStatus = "active" | "passed" | "defeated" | "draft" | "all"
+export type ProposalStatus = "active" | "passed" | "executed" | "defeated" | "draft" | "all"
 
 export interface GovernanceProposal {
   id: string
@@ -127,12 +127,20 @@ export function createProposal(input: {
   return Promise.resolve(newProp)
 }
 
-export function voteOnProposal(id: string, support: boolean | "abstain", reason?: string) {
-  const prop = MOCK_GOVERNANCE_PROPOSALS.find((p) => p.id === id)
-  if (prop) {
-    if (support === true) prop.votesFor += 1
-    else if (support === false) prop.votesAgainst += 1
-    else if (support === "abstain") prop.votesAbstain = (prop.votesAbstain || 0) + 1
+export async function voteOnProposal(id: string, support: boolean | "abstain", reason?: string) {
+  try {
+    return await (await import("@/lib/api-client")).post<{ success: boolean; proposal?: GovernanceProposal }>(
+      `/governance/proposals/${id}/votes`,
+      { support, reason },
+    )
+  } catch {
+    // Local development fallback when the governance API is unavailable.
+    const prop = MOCK_GOVERNANCE_PROPOSALS.find((proposal) => proposal.id === id)
+    if (prop) {
+      if (support === true) prop.votesFor += 1
+      else if (support === false) prop.votesAgainst += 1
+      else prop.votesAbstain = (prop.votesAbstain || 0) + 1
+    }
+    return { success: true, proposal: prop }
   }
-  return Promise.resolve({ success: true, proposal: prop })
 }

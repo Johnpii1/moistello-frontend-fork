@@ -77,7 +77,7 @@ export function isLogLevelEnabled(level: LogLevel): boolean {
   return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[getConfiguredLogLevel()]
 }
 
-function redactString(value: string): string {
+export function scrubLogString(value: string): string {
   return value
     .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi, "[email]")
     .replace(/G[A-Za-z0-9]{55}/g, "[stellar-address]")
@@ -88,11 +88,11 @@ function redactString(value: string): string {
     .slice(0, MAX_REDACTED_STRING_LENGTH)
 }
 
-const SENSITIVE_KEY = /password|passcode|token|secret|authorization|cookie|private|credential|mnemonic|seed|otp|verification.?code|challenge|nonce|signature|xdr|session|user|wallet|address|email|file(name)?/i
+const SENSITIVE_KEY = /password|passcode|token|secret|authorization|cookie|private|credential|mnemonic|seed|otp|verification.?code|challenge|nonce|signature|xdr|session|user|wallet|address|email|file(name)?|name|phone|birth|ssn|tax.?id/i
 
-function redactValue(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+export function scrubLogValue(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
   if (depth > MAX_CONTEXT_DEPTH) return "[truncated]"
-  if (typeof value === "string") return redactString(value)
+  if (typeof value === "string") return scrubLogString(value)
   if (typeof value === "bigint") return value.toString()
   if (typeof value === "function") return "[function]"
   if (typeof value === "symbol") return "[symbol]"
@@ -100,20 +100,20 @@ function redactValue(value: unknown, depth = 0, seen = new WeakSet<object>()): u
   if (value instanceof Error) {
     return {
       name: value.name,
-      message: redactString(value.message),
-      stack: value.stack ? redactString(value.stack) : undefined,
+      message: scrubLogString(value.message),
+      stack: value.stack ? scrubLogString(value.stack) : undefined,
     }
   }
   if (seen.has(value)) return "[circular]"
   seen.add(value)
 
   if (Array.isArray(value)) {
-    return value.slice(0, 20).map((item) => redactValue(item, depth + 1, seen))
+    return value.slice(0, 20).map((item) => scrubLogValue(item, depth + 1, seen))
   }
 
   const result: Record<string, unknown> = {}
   for (const [key, item] of Object.entries(value).slice(0, 50)) {
-    result[key] = SENSITIVE_KEY.test(key) ? REDACTED : redactValue(item, depth + 1, seen)
+    result[key] = SENSITIVE_KEY.test(key) ? REDACTED : scrubLogValue(item, depth + 1, seen)
   }
   return result
 }
@@ -156,7 +156,7 @@ function cappedContext(context: LogContext): LogContext {
 export function sanitizeLogContext(context?: LogContext): LogContext | undefined {
   if (!context) return undefined
   try {
-    return cappedContext(redactValue(context) as LogContext)
+    return cappedContext(scrubLogValue(context) as LogContext)
   } catch {
     return { truncated: "[unserializable context]" }
   }
@@ -176,7 +176,7 @@ function fingerprintFor(level: LogLevel, message: string, context?: LogContext):
 function createEvent(level: LogLevel, message: string, context?: LogContext): LogEvent {
   let safeMessage: string
   try {
-    safeMessage = redactString(String(message).slice(0, 2_000))
+    safeMessage = scrubLogString(String(message).slice(0, 2_000))
   } catch {
     safeMessage = "[unserializable message]"
   }
@@ -492,7 +492,7 @@ export function parseLogEvents(payload: unknown): LogEvent[] {
       : 1
     events.push({
       level: value.level,
-      message: redactString(value.message),
+      message: scrubLogString(value.message),
       timestamp,
       occurrences,
       ...(typeof value.firstTimestamp === "number" && Number.isFinite(value.firstTimestamp) ? { firstTimestamp: value.firstTimestamp } : {}),

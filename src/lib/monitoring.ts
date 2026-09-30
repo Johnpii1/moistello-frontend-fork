@@ -2,7 +2,7 @@
 
 import * as Sentry from "@sentry/nextjs"
 import type { AuthErrorCode } from "@/stores/auth-flow-store"
-import { attachLogFlushListeners, logger } from "@/lib/logger"
+import { attachLogFlushListeners, logger, scrubLogString, scrubLogValue } from "@/lib/logger"
 
 export type MetricName =
   | "governance.proposal.created"
@@ -47,11 +47,20 @@ const MAX_BUFFER_SIZE = 500
 let metricBuffer: MetricEvent[] = []
 let flushTimer: ReturnType<typeof setInterval> | null = null
 
-function stripPii(value: string): string {
-  return value
-    .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[email]")
-    .replace(/G[A-Za-z0-9]{55}/g, "[stellar-address]")
-    .replace(/0x[a-fA-F0-9]{40}/g, "[evm-address]")
+function scrubReporterError(error: unknown): Error | string | unknown {
+  if (error instanceof Error) {
+    const safe = new Error(scrubLogString(error.message))
+    safe.name = error.name
+    safe.stack = error.stack ? scrubLogString(error.stack) : undefined
+    return safe
+  }
+  if (typeof error === "string") return scrubLogString(error)
+  return scrubLogValue(error)
+}
+
+function scrubMetricTags(tags?: Record<string, string>): Record<string, string> | undefined {
+  if (!tags) return undefined
+  return scrubLogValue(tags) as Record<string, string>
 }
 
 export function captureAuthError(error: unknown, context: AuthErrorContext): void {
@@ -62,8 +71,9 @@ export function captureAuthError(error: unknown, context: AuthErrorContext): voi
   }
 
   if (context.walletId) tags.walletId = context.walletId
+  const safeTags = scrubMetricTags(tags) ?? {}
 
-  recordMetric("auth.error.caught", 1, tags)
+  recordMetric("auth.error.caught", 1, safeTags)
 
   const dsn = typeof process !== "undefined"
     ? (process.env as Record<string, string>).NEXT_PUBLIC_SENTRY_DSN
@@ -71,25 +81,17 @@ export function captureAuthError(error: unknown, context: AuthErrorContext): voi
 
   if (dsn) {
     Sentry.withScope((scope) => {
-      scope.setTags(tags)
-      scope.setExtra("mode", context.mode ?? "unknown")
-      scope.setExtra("step", context.step ?? "unknown")
+      scope.setTags(safeTags)
+      scope.setExtra("mode", scrubLogString(context.mode ?? "unknown"))
+      scope.setExtra("step", scrubLogString(context.step ?? "unknown"))
       scope.addBreadcrumb({
         category: "auth",
-        message: `Auth error in ${context.mode}/${context.step}`,
+        message: scrubLogString(`Auth error in ${context.mode}/${context.step}`),
         level: "error",
       })
 
-      if (error instanceof Error) {
-        const stripped = {
-          ...error,
-          message: stripPii(error.message),
-          stack: error.stack ? stripPii(error.stack) : undefined,
-        }
-        Sentry.captureException(stripped)
-      } else {
-        Sentry.captureException(typeof error === "string" ? stripPii(error) : error)
-      }
+      // Scrub before handing data to Sentry: it is a transport boundary.
+      Sentry.captureException(scrubReporterError(error))
     })
   } else {
     const message = error instanceof Error ? error.message : String(error)
@@ -110,7 +112,7 @@ export function recordMetric(
   const event: MetricEvent = {
     name,
     value,
-    tags,
+    tags: scrubMetricTags(tags),
     timestamp: Date.now(),
   }
   metricBuffer.push(event)
@@ -181,17 +183,17 @@ export function initMonitoring(): void {
   recordMetric("page.view", 1, { path: pagePath })
 
   window.addEventListener("error", (event) => {
-    Sentry.captureException(event.error ?? event.message)
+    Sentry.captureException(scrubReporterError(event.error ?? event.message))
     recordMetric("error.unhandled", 1, {
-      message: event.message,
+      message: scrubLogString(event.message),
       source: event.filename || "unknown",
     })
   })
 
   window.addEventListener("unhandledrejection", (event) => {
-    Sentry.captureException(event.reason ?? event.reason?.message)
+    Sentry.captureException(scrubReporterError(event.reason ?? event.reason?.message))
     recordMetric("error.unhandled", 1, {
-      message: event.reason?.message || String(event.reason),
+      message: scrubLogString(event.reason?.message || String(event.reason)),
       source: "unhandled-rejection",
     })
   })
