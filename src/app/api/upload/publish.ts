@@ -3,6 +3,7 @@ import path from "path";
 
 import { logger } from "@/lib/logger";
 import { sanitizeHtml } from "@/lib/security/html-sanitizer";
+import { UPLOAD_TYPE_POLICIES, validateUploadFile } from "@/lib/upload-policy";
 
 /**
  * Validation and page rendering shared by the upload and finalize routes.
@@ -12,8 +13,8 @@ import { sanitizeHtml } from "@/lib/security/html-sanitizer";
  */
 
 export const PAGES_DIR = path.join(process.cwd(), "content/pages");
-export const ALLOWED_EXTENSIONS = [".md", ".html"] as const;
-export const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
+export const ALLOWED_EXTENSIONS = Object.keys(UPLOAD_TYPE_POLICIES);
+export const MAX_UPLOAD_SIZE = Math.max(...Object.values(UPLOAD_TYPE_POLICIES).map((policy) => policy.maxBytes));
 const SLUG_PATTERN = /^[a-zA-Z0-9\-_]+$/;
 
 export interface ValidationFailure {
@@ -26,32 +27,18 @@ export type ValidationResult =
   | { ok: false; failure: ValidationFailure };
 
 export function validateUpload(fileName: string, size: number): ValidationResult {
-  const extension = path.extname(fileName).toLowerCase();
-
-  if (!(ALLOWED_EXTENSIONS as readonly string[]).includes(extension)) {
-    return {
-      ok: false,
-      failure: { error: "Only .md and .html files are allowed", status: 400 },
-    };
+  const fileValidation = validateUploadFile(fileName, size);
+  if (!fileValidation.ok) {
+    return { ok: false, failure: { error: fileValidation.error, status: 400 } };
   }
 
-  if (size > MAX_UPLOAD_SIZE) {
-    return {
-      ok: false,
-      failure: {
-        error: `File too large (max ${MAX_UPLOAD_SIZE / 1024 / 1024}MB)`,
-        status: 400,
-      },
-    };
-  }
-
-  const slug = fileName.replace(extension, "");
+  const extension = fileValidation.extension;
+  const slug = fileName.slice(0, -extension.length);
   if (!SLUG_PATTERN.test(slug)) {
     return {
       ok: false,
       failure: {
-        error:
-          "Filename must contain only letters, numbers, hyphens, or underscores",
+        error: "Filename must contain only letters, numbers, hyphens, or underscores",
         status: 400,
       },
     };

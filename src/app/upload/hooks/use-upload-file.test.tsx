@@ -250,3 +250,20 @@ describe("useUploadFile — two-phase upload", () => {
     expect(result.current.uploadedUrl).toBe("");
   });
 });
+
+describe("useUploadFile — preflight validation", () => {
+  it("rejects unsupported files immediately without starting a transfer", async () => {
+    const { result } = renderHook(() => useUploadFile())
+    const rejectedFile = new File(["not a page"], "payload.pdf", { type: "application/pdf" })
+
+    act(() => {
+      result.current.selectFile({ target: { files: [rejectedFile], value: "payload.pdf" } } as unknown as React.ChangeEvent<HTMLInputElement>)
+    })
+
+    expect(result.current.status).toBe("error")
+    expect(result.current.errorKind).toBe("validation")
+    expect(result.current.message).toContain("Allowed types: Markdown (.md): max 5 MB; HTML (.html): max 5 MB")
+    expect(result.current.file).toBeNull()
+    expect(transferFileMock).not.toHaveBeenCalled()
+  })
+})

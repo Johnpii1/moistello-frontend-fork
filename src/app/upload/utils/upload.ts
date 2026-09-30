@@ -1,4 +1,10 @@
-export const ALLOWED_UPLOAD_EXTENSIONS = [".md", ".html"] as const
+import {
+  ALLOWED_UPLOAD_EXTENSIONS,
+  getUploadExtension,
+  validateUploadFile,
+} from "@/lib/upload-policy"
+
+export { ALLOWED_UPLOAD_EXTENSIONS, validateUploadFile }
 
 /**
  * Upload lifecycle.
@@ -36,12 +42,11 @@ export const FINALIZE_TIMEOUT_MS = 15_000
 export const TRANSFER_TIMEOUT_MS = 60_000
 
 export function getFileExtension(fileName: string): string {
-  const parts = fileName.split(".")
-  return parts.length > 1 ? `.${parts.pop()?.toLowerCase()}` : ""
+  return getUploadExtension(fileName)
 }
 
 export function isAllowedUpload(file: File): boolean {
-  return (ALLOWED_UPLOAD_EXTENSIONS as readonly string[]).includes(getFileExtension(file.name))
+  return validateUploadFile(file.name, file.size).ok
 }
 
 export function getUploadSlug(fileName: string): string {

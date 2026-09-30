@@ -2,6 +2,7 @@ import type { ChangeEvent, RefObject } from "react"
 import { FileText, Upload, X } from "lucide-react"
 import { cn } from "@/lib/cn"
 import { formatFileSize, getUploadPath, getUploadSlug } from "../utils/upload"
+import { getUploadLimitsDescription } from "@/lib/upload-policy"
 
 interface FileDropzoneProps {
   file: File | null
@@ -45,7 +46,7 @@ export function FileDropzone({ file, fileRef, onFileSelect, onClear }: FileDropz
           <>
             <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" aria-hidden="true" />
             <p className="text-muted-foreground text-sm">Click to select a file</p>
-            <p id="upload-file-help" className="text-muted-foreground/50 text-xs mt-1">.md or .html only</p>
+            <p id="upload-file-help" className="text-muted-foreground/50 text-xs mt-1">{getUploadLimitsDescription()}</p>
           </>
         )}
       </label>

@@ -99,6 +99,12 @@ export default function GovernancePage() {
             <CircleCheckBig className="h-3 w-3" /> Passed
           </span>
         )
+      case "executed":
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-400 font-semibold">
+            <CircleCheckBig className="h-3 w-3" /> Executed
+          </span>
+        )
       case "defeated":
         return (
           <span className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-0.5 text-xs text-red-400 font-semibold">
